@@ -1,0 +1,3 @@
+/home/kadufi/Desktop/ComputacaoGrafica/paint/build/CMakeFiles/paint.dir
+/home/kadufi/Desktop/ComputacaoGrafica/paint/build/CMakeFiles/edit_cache.dir
+/home/kadufi/Desktop/ComputacaoGrafica/paint/build/CMakeFiles/rebuild_cache.dir
