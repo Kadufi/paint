@@ -14,6 +14,15 @@
 #include "colorpicker.hpp"
 #include "poligono.hpp"
 
+/*
+- SCR_WIDTH/HEIGHT: Constantes do tamanho da janela.
+- g_Plano: administra tudo
+- g_ColorPicker: administra cor
+- bool g_...: "Flags" que controlam os estados
+- g_creationState: Um "estado" especial para o processo de criaçao de poligonos.
+- g_...VAO/VBO: Buffers de "rascunho" para desenhar previews (polígono, marquee) que não são objetos permanentes.
+*/
+
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
 
@@ -35,6 +44,11 @@ unsigned int g_previewVBO = 0;
 unsigned int g_marqueeVAO = 0;
 unsigned int g_marqueeVBO = 0;
 
+
+
+/*
+- callbacks
+*/
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
@@ -43,6 +57,13 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 
 
 int main() {
+
+    /*
+    - Inicializaçao (GLFW, GLAD, window)
+    - GLFW usa OpenGL 3.3
+    - conecta os callback
+    */
+
     glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -60,7 +81,13 @@ int main() {
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         return -1;
     }
-    glDisable(GL_DEPTH_TEST);
+
+    /*
+    - Carrega os shader
+    - Carrega os mash, carimbos das formas primitivas
+    - Cria os VAO VBO temporarios usados no processo de criação dos poligonos 
+    - Cria os VAO VBO da caixa de seleção
+    */
 
     Shader shader2D("../shader/simples.vert", "../shader/simples.frag");
     Shader uiShader("../shader/ui.vert", "../shader/ui.frag");
@@ -86,17 +113,32 @@ int main() {
 
     glBindVertexArray(0);
     
+    /*
+    - Loop principal
+    */
+
     while (!glfwWindowShouldClose(window)) {
         
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
+        /*
+        - Configura o shader2d com as matrizes projection(zoom), view(pan)
+        - Depois desenha todos os objetos do mundo.
+        */
+
         shader2D.use();
         glm::mat4 projection = g_Plano.getMatrizProjection();
         glm::mat4 view = g_Plano.getMatrizView();
         shader2D.setMat4("u_projection", projection);
-        shader2D.setMat4("u_view", view);   
+        shader2D.setMat4("u_view", view);
+
         g_Plano.desenhar(shader2D); 
+
+        /*
+        - Modo de criação
+        - desenha as linhas temporarias g_previewVAO.
+        */
 
         if (g_creationState == CreationState::CREATING_POLYGON && !g_tempVertices.empty()) {
             shader2D.use();
@@ -113,6 +155,11 @@ int main() {
             glBindVertexArray(0);
         }
         
+        /*
+        - Caixa de seleção
+        - Desenha o retangulo branco
+        */
+
         if (g_IsSelectingMarquee) {
             double xpos, ypos;
             glfwGetCursorPos(window, &xpos, &ypos);
@@ -139,6 +186,9 @@ int main() {
             glBindVertexArray(0);
         }
 
+        /*
+        - Desenha o ColorPicker
+        */
         int width, height;
         glfwGetWindowSize(window, &width, &height);
         g_ColorPicker.desenhar(uiShader, width, height);
@@ -147,6 +197,9 @@ int main() {
         glfwPollEvents();
     }
 
+    /*
+    - Limpeza
+    */
     glDeleteVertexArrays(1, &g_marqueeVAO);
     glDeleteBuffers(1, &g_marqueeVBO);
     glDeleteVertexArrays(1, &g_previewVAO);
@@ -160,8 +213,12 @@ int main() {
     return 0;
 }
 
+/*
+- maquina de estados mau feita
+*/
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    // ESC é o "cancelar" universal
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         if (g_creationState == CreationState::CREATING_POLYGON) {
             g_creationState = CreationState::NONE;
@@ -177,6 +234,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         return;
     }
 
+    // liga e desliga modo de criação de poligono
     if (key == GLFW_KEY_P && action == GLFW_PRESS) {
         if (g_creationState == CreationState::NONE) {
             g_creationState = CreationState::CREATING_POLYGON;
@@ -193,9 +251,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
         return;
     }
-    
+    //se tiver sendo criado um poligono, bloqueia o resto
     if (g_creationState != CreationState::NONE) return;
 
+    // Zoom in out
     if (key == GLFW_KEY_I && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         g_Plano.zoomIn();
     }
@@ -204,6 +263,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         g_Plano.zoomOut();
     } 
    
+    // Cria triangulo
     if (key == GLFW_KEY_T && action == GLFW_PRESS) {
         double xpos_pixels, ypos_pixels;
         glfwGetCursorPos(window, &xpos_pixels, &ypos_pixels);
@@ -212,6 +272,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         g_Plano.adicionarForma(std::move(novoTriangulo));
     }
     
+    // Cria quadrado
     if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
         double xpos_pixels, ypos_pixels;
         glfwGetCursorPos(window, &xpos_pixels, &ypos_pixels);
@@ -220,6 +281,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         g_Plano.adicionarForma(std::move(novoRetangulo));
     }
     
+    // Cria circulo
     if (key == GLFW_KEY_C && action == GLFW_PRESS) {
         double xpos_pixels, ypos_pixels;
         glfwGetCursorPos(window, &xpos_pixels, &ypos_pixels);
@@ -228,6 +290,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         g_Plano.adicionarForma(std::move(novoCirculo));
     }
 
+    // Liga e desliga estado de rotação, precisa selecionar algo antes
     if (key == GLFW_KEY_R && action == GLFW_PRESS) {
         if (g_isRotationMode) {
             g_isRotationMode = false;
@@ -240,6 +303,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         return;
     }
 
+    // Se estiver em modo de rotação captura as setas
     if (g_isRotationMode) {
         float angulo = glm::radians(5.0f);
         if (key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
@@ -251,6 +315,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         return;
     }
     
+    // Teclas de escala
     float scale_factor = 1.1f;
     if (key == GLFW_KEY_EQUAL && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
         g_Plano.escalarObjetosSelecionados(scale_factor);
@@ -260,16 +325,21 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         g_Plano.escalarObjetosSelecionados(1.0f / scale_factor);
     }
 
+    //Tecla de remoção
     if (key == GLFW_KEY_BACKSPACE && action == GLFW_PRESS) {
         g_Plano.removerObjetosSelecionados();
         g_ColorPicker.setVisible(false);
     }
 }
 
+/*
+- Administra os cliques do mouse
+*/
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
     
+    // Se está criando um poligono adciona um ponto
     if (g_creationState == CreationState::CREATING_POLYGON) {
         if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
             glm::vec2 posMundo = g_Plano.converterMouseParaMundo(xpos, ypos);
@@ -278,16 +348,23 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         return;
     }
 
+    // selecionar arrastar 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
+
+            // Se foi na "UI" ignora o clique no "mundo"            
             if (g_ColorPicker.isVisible() && g_ColorPicker.onMouseClick(xpos, ypos, action)) {
                 return;
             }
             
+            g_isRotationMode = false; // Cancela o modo de rotação
+
+
             g_LastMousePos = glm::dvec2(xpos, ypos);
             glm::vec2 posMundo = g_Plano.converterMouseParaMundo(xpos, ypos);
             bool addSelecao = (mods & GLFW_MOD_SHIFT);
             
+            // Se o clique foi em algo ja selecionado
             bool clicouEmSelecionado = false;
             for (auto* forma : g_Plano.getObjetosSelecionados()) {
                 if (forma->foiSelecionado(posMundo)) {
@@ -295,10 +372,12 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                     break;
                 }
             }
-
+            
+            // Se clicou em um objeto já selecionado (sem Shift), ativa o modo "arrastar"
             if (clicouEmSelecionado && !addSelecao) {
                 g_IsDragging = true;
             } else {
+                // Senão, executa a lógica de seleção normal
                 g_Plano.selecionarObjeto(posMundo, addSelecao);
                 
                 if (!g_Plano.getObjetosSelecionados().empty()) {
@@ -308,6 +387,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
                     }
                     g_ColorPicker.setVisible(true);
                 } else {
+                    // Se clicou no vazio, começa a "seleção em área" (marquee)
                     g_IsDragging = false;
                     g_IsSelectingMarquee = true;
                     g_MarqueeStartPosMundo = posMundo;
@@ -319,6 +399,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
             g_ColorPicker.onMouseClick(xpos, ypos, action);
             g_IsDragging = false;
 
+            // Se estava desenhando a caixa de seleção, finaliza
             if (g_IsSelectingMarquee) {
                 g_IsSelectingMarquee = false;
                 glm::vec2 posMundo = g_Plano.converterMouseParaMundo(xpos, ypos);
@@ -330,6 +411,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
         }
     }
     
+    // Pan, clique no meio
     if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
         if (action == GLFW_PRESS) {
             if (g_ColorPicker.isVisible() && g_ColorPicker.onMouseClick(xpos, ypos, action)) {
@@ -343,32 +425,44 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
     }
 }
 
+/*
+- Administra o movimento do mouse
+*/
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
+    // Arrastar os pinos
     g_ColorPicker.onMouseMove(xpos, ypos);
     if(g_ColorPicker.foiAtualizada()) {
         g_Plano.setCorObjetosSelecionados(g_ColorPicker.getCor());
     }
 
-    if (g_creationState == CreationState::CREATING_POLYGON) {
+    // Ignora o pan/drag se estiver rotacionando ou criando poligono
+    if (g_creationState == CreationState::CREATING_POLYGON || g_isRotationMode) {
         return;
     }
 
+    // Se nao estiver em algum modo, para
     if (!g_IsPanning && !g_IsDragging && !g_IsSelectingMarquee) {
         return;
     } 
 
+    // Calcula a variação do movimento
     double deltaX = xpos - g_LastMousePos.x;
     double deltaY = ypos - g_LastMousePos.y;
 
+    // Executa a ação
     if (g_IsPanning) {
         g_Plano.pan(deltaX, deltaY);
     } else if (g_IsDragging) {
         g_Plano.transladarObjetosSelecionados(deltaX, deltaY);
     }
 
+    // Salva a nova posição
     g_LastMousePos = glm::dvec2(xpos, ypos);
 }
 
+/*
+- In Out, scroll
+*/
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
     if (yoffset > 0) {
         g_Plano.zoomIn();
@@ -377,6 +471,9 @@ void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
     }
 }
 
+/*
+- Redmensionamento
+*/
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
     g_Plano.onTamanhoJanelaMudou(width, height);
